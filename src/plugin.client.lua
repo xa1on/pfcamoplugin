@@ -230,7 +230,8 @@ local function UpdateEditor()
             SetTextureProperty(i, "OffsetStudsV", p)
         end)
     end
-    local ResetButton = gui.Button.new({Text = "Reset Models", ButtonSize = 0.6}, CamoEditorSection.Content)
+    gui.ListFrame.new({Height = 15}, CamoEditorSection.Content)
+    local ResetButton = gui.Button.new({Text = "Reset Models", ButtonSize = 0.6}, gui.ListFrame.new(nil, CamoEditorSection.Content).Content)
     ResetButton:Clicked(function()
         for i, v in pairs(Meshes) do
             for _, j in pairs(v) do
