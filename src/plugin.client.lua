@@ -230,6 +230,23 @@ local function UpdateEditor()
             SetTextureProperty(i, "OffsetStudsV", p)
         end)
     end
+    local ResetButton = gui.Button.new({Text = "Reset Models", ButtonSize = 0.6}, CamoEditorSection.Content)
+    ResetButton:Clicked(function()
+        for i, v in pairs(Meshes) do
+            for _, j in pairs(v) do
+                local OriginalColor = j:FindFirstChild("OriginalColor")
+                if OriginalColor then SetMeshProperty(i, "Color", OriginalColor.Value) OriginalColor:Destroy() end
+                local TextureName = j:FindFirstChild("TextureName")
+                if TextureName then TextureName:Destroy() end
+                for _, k in pairs(j:GetChildren()) do
+                    if k:IsA("Texture") and string.sub(k.Name,1, string.len(TexturePrefix)) == TexturePrefix then
+                        k:Destroy()
+                    end
+                end
+            end
+        end
+        for _, v in pairs(CamoEditorSection.Content:GetChildren()) do if v:IsA("Frame") then v:Destroy() end end
+    end)
 end
 
 SelectedModels:Changed(function(Selection)
