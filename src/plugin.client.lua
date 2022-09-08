@@ -55,7 +55,6 @@ FileButton:SelectedAction(function(Action)
         end)
     elseif Action.Text == "Clear Imported Camos" then
         Camos = {}
-        plugin:SetSetting("{}", Camos)
     end
 end)
 
@@ -134,7 +133,8 @@ local function SetTexture(Slot, Item)
         for _, j in pairs(v:GetChildren()) do
             if j:IsA("Texture") and string.sub(j.Name,1, string.len(TexturePrefix)) == TexturePrefix then
                 local Face = string.sub(j.Name, string.len(TexturePrefix) + 1)
-                j.Texture = "rbxassetid://" .. Item.Value.Texture
+                if Item.Value.Texture then j.Texture = "rbxassetid://" .. Item.Value.Texture
+                else j.Texture = Item.Value end
                 ReqiredFaces[Face] = nil
             end
         end
@@ -142,7 +142,8 @@ local function SetTexture(Slot, Item)
             local TextureInstance = Instance.new("Texture", v)
             TextureInstance.Name = TexturePrefix .. i
             TextureInstance.Face = Enum.NormalId[i]
-            TextureInstance.Texture = "rbxassetid://" .. Item.Value.Texture
+            if Item.Value.Texture then TextureInstance.Texture = "rbxassetid://" .. Item.Value.Texture
+            else TextureInstance.Texture = Item.Value end
         end
     end
 end
@@ -191,10 +192,24 @@ local function UpdateEditor()
             if typeof(p) ~= "EnumItem" then return end
             SetMeshProperty(i, "Material", p)
         end)
+        MaterialSelection.Object:DropdownToggled(function()
+            if typeof(MaterialSelection.Object.Value) ~= "EnumItem" then return end
+            SetMeshProperty(i, "Material", MaterialSelection.Object.Value)
+        end)
         local MeshColor = gui.Labeled.new({Text = "Mesh Color", LabelSize = UDim.new(0,90), Object = gui.ColorInput.new({Value = v.Color})}, gui.ListFrame.new(nil,EditMesh.Content).Content)
         MeshColor.Object:Changed(function(p)
             if typeof(p) ~= "Color3" then return end
             SetMeshProperty(i, "Color", p)
+        end)
+        CamoSelection.Object:MouseEnterItem(function(p)
+            task.wait(0)
+            SetTexture(i, {Name = CamoSelection.Object.Input.Text, Value = {Texture = p.Texture}})
+        end)
+        CamoSelection.Object:MouseLeaveItem(function()
+            SetTexture(i, {Name = CamoSelection.Object.Input.Text, Value = {Texture = CamoSelection.Object.Value.Texture}})
+        end)
+        CamoSelection.Object:DropdownToggled(function()
+            SetTexture(i, {Name = CamoSelection.Object.Input.Text, Value = {Texture = CamoSelection.Object.Value.Texture}})
         end)
         CamoSelection.Object:Changed(function(p)
             SetTexture(i, {Name = CamoSelection.Object.Input.Text, Value = p})
@@ -277,7 +292,7 @@ SelectedModels:Changed(function(Selection)
                     if MeshTexture and string.sub(MeshTexture.Name,1,string.len(TexturePrefix)) == TexturePrefix then
                         local TextureName = CurrentMesh:FindFirstChild("TextureName")
                         if TextureName then TextureName = TextureName.Value end
-                        CamoSlotInfo[SlotNum].Texture = {Value = MeshTexture.Texture, Name = TextureName}
+                        CamoSlotInfo[SlotNum].Texture = {Value = {Texture = MeshTexture.Texture}, Name = TextureName}
                         local RequiredProperties = {"Transparency", "OffsetStudsV", "OffsetStudsU", "StudsPerTileV", "StudsPerTileU","Color3"}
                         for _, k in pairs(RequiredProperties) do
                             CamoSlotInfo[SlotNum][k] = MeshTexture[k]
