@@ -7,6 +7,7 @@
 -- dependencies
 local gui = require(script.Parent.rblxgui.initialize)(plugin,"pfcamoplugin")
 local SelectionService = game:GetService("Selection")
+local HttpService = game:GetService("HttpService")
 
 -- toolbar
 Toolbar = plugin:CreateToolbar("pfcamoplugin")
@@ -21,26 +22,40 @@ local Widget = gui.PluginWidget.new({
 })
 
 local ImportedCamoSaveID = "ImportedCamos"
-local Camos = plugin:GetSetting(ImportedCamoSaveID) or {}
+local TexturePrefix = "PF"
+
+--HttpService.HttpEnabled = true
+local Camos = HttpService:JSONDecode(plugin:GetSetting(ImportedCamoSaveID) or "{}")
 
 local FileMenu = plugin:CreatePluginMenu(math.random(), "File Menu")
 FileMenu.Name = "FileMenu"
-FileMenu.AddNewAction("Import Camos", "Import Camos", "")
-FileMenu.AddNewAction("Clear Imported Camos", "Clear Imported Camos", "")
+FileMenu:AddNewAction("Import Camos", "Import Camos", "")
+FileMenu:AddNewAction("Clear Imported Camos", "Clear Imported Camos", "")
 local FileButton = gui.TitlebarButton.new({Name = "FILE", PluginMenu = FileMenu})
 
 FileButton:SelectedAction(function(Action)
     if not Action then return end
     if Action.Text == "Import Camos" then
-        local ImportCamoPrompt = gui.TextPrompt.new({Title = "Import Camos", Text = "Select your camo script and press OK", Buttons = {"OK", "Cancel"}})
+        local ImportCamoPrompt = gui.TextPrompt.new({Title = "Import Camos", Text = "Select your camo script(s) and press OK", Buttons = {"OK", "Cancel"}})
         SelectionService:Set({})
         ImportCamoPrompt:Clicked(function(p)
             if p == 2 then return end
-
+            local Selection = SelectionService:Get()
+            if typeof(Selection) == "table" then
+                for _,v in pairs(Selection) do
+                    if v:IsA("ModuleScript") then
+                        local ImportedScript = require(v)
+                        for i,j in ImportedScript do
+                            print("Imported " .. tostring(i))
+                            Camos[i] = j
+                        end
+                    end
+                end
+            end
         end)
     elseif Action.Text == "Clear Imported Camos" then
         Camos = {}
-        plugin:SetSetting(ImportedCamoSaveID, Camos)
+        plugin:SetSetting("{}", Camos)
     end
 end)
 
@@ -106,12 +121,53 @@ local function SetMeshProperty(Slot, Property, Value)
         v[Property] = Value
     end
 end
+local function SetTexture(Slot, Item)
+    for _, v in pairs(Meshes[Slot]) do
+        if Item.Value.BrickColor then SetMeshProperty(Slot, "BrickColor", BrickColor.new(Item.Value.BrickColor)) end
+        local TextureName = v:FindFirstChild("TextureName")
+        if not TextureName then
+            TextureName = Instance.new("StringValue", v)
+            TextureName.Name = "TextureName"
+        end
+        local ReqiredFaces = {["Front"] = "", ["Back"] = "", ["Bottom"] = "", ["Top"] = "", ["Left"] = "", ["Right"] = ""}
+        TextureName.Value = Item.Name
+        for _, j in pairs(v:GetChildren()) do
+            if j:IsA("Texture") and string.sub(j.Name,1, string.len(TexturePrefix)) == TexturePrefix then
+                local Face = string.sub(j.Name, string.len(TexturePrefix) + 1)
+                j.Texture = "rbxassetid://" .. Item.Value.Texture
+                ReqiredFaces[Face] = nil
+            end
+        end
+        for i, _ in pairs(ReqiredFaces) do
+            local TextureInstance = Instance.new("Texture", v)
+            TextureInstance.Name = TexturePrefix .. i
+            TextureInstance.Face = Enum.NormalId[i]
+            TextureInstance.Texture = "rbxassetid://" .. Item.Value.Texture
+        end
+    end
+end
+local function SetTextureProperty(Slot, Property, Value)
+    for _, v in pairs(Meshes[Slot]) do
+        for _, j in pairs(v:GetChildren()) do
+            if j:IsA("Texture") and string.sub(j.Name,1, string.len(TexturePrefix)) == TexturePrefix then
+                j[Property] = Value
+            end
+        end
+    end
+end
 
 local function UpdateEditor()
     for _, v in pairs(CamoEditorSection.Content:GetChildren()) do if v:IsA("Frame") then v:Destroy() end end
     for i, v in pairs(CamoSlotInfo) do
         local SlotSection = gui.Section.new({Text = "Slot "..i, Open = true}, CamoEditorSection.Content)
-        local CamoSelection = gui.Labeled.new({Text = "Applied Skin", Object = gui.InputField.new({Placeholder = "Texture"})}, gui.ListFrame.new(nil,SlotSection.Content).Content)
+        -- Texture Selection
+        local CamoSelection = gui.Labeled.new({Text = "Applied Skin", Object = gui.InputField.new({Placeholder = "Texture", CurrentItem = v.Texture})}, gui.ListFrame.new(nil,SlotSection.Content).Content)
+        for k,j in pairs(Camos) do
+            if not j.TextureId then return end
+            local PresetBrickColor
+            if j.BrickPreset and j.BrickPreset.BrickColor then PresetBrickColor = j.BrickPreset.BrickColor end
+            CamoSelection.Object:AddItem({Name = k, Value = {Texture = j.TextureId, BrickColor = PresetBrickColor}})
+        end
         local EditMesh = gui.Section.new({Text = "Edit Mesh", Open = true}, SlotSection.Content)
         local EditTexture = gui.Section.new({Text = "Edit Texture", Open = true}, SlotSection.Content)
         -- Material Editing
@@ -140,16 +196,39 @@ local function UpdateEditor()
             if typeof(p) ~= "Color3" then return end
             SetMeshProperty(i, "Color", p)
         end)
-        local TextureColor = gui.Labeled.new({Text = "Texture Color", LabelSize = UDim.new(0,90), Object = gui.ColorInput.new()}, gui.ListFrame.new(nil,EditTexture.Content).Content)
-        local ReflectanceSlider = gui.Labeled.new({Text = "Reflectance", LabelSize = UDim.new(0,90), Object = gui.Slider.new({Min = 0, Max = 1, Increment = 0.05})}, gui.ListFrame.new(nil,EditMesh.Content).Content)
+        CamoSelection.Object:Changed(function(p)
+            SetTexture(i, {Name = CamoSelection.Object.Input.Text, Value = p})
+            if p.BrickColor then MeshColor.Object:SetValue(BrickColor.new(p.BrickColor).Color) end
+        end)
+        local TextureColor = gui.Labeled.new({Text = "Texture Color", LabelSize = UDim.new(0,90), Object = gui.ColorInput.new({Value = v.Color3})}, gui.ListFrame.new(nil,EditTexture.Content).Content)
+        TextureColor.Object:Changed(function(p)
+            if typeof(p) ~= "Color3" then return end
+            SetTextureProperty(i, "Color3", p)
+        end)
+        local ReflectanceSlider = gui.Labeled.new({Text = "Reflectance", LabelSize = UDim.new(0,90), Object = gui.Slider.new({Min = 0, Max = 1, Increment = 0.05, Value = v.Reflectance})}, gui.ListFrame.new(nil,EditMesh.Content).Content)
         ReflectanceSlider.Object:Changed(function(p)
             SetMeshProperty(i, "Reflectance", p)
         end)
-        local TransparencySlider = gui.Labeled.new({Text = "Transparency", LabelSize = UDim.new(0,90), Object = gui.Slider.new({Min = 0, Max = 1, Increment = 0.05})}, gui.ListFrame.new(nil,EditTexture.Content).Content)
-        local StudsPerTileU = gui.Labeled.new({Text = "StudsPerTileU", LabelSize = UDim.new(0,90), Object = gui.Slider.new({Min = 0, Max = 5, Increment = 0.05, Value = 1})}, gui.ListFrame.new(nil,EditTexture.Content).Content)
-        local StudsPerTileV = gui.Labeled.new({Text = "StudsPerTileV", LabelSize = UDim.new(0,90), Object = gui.Slider.new({Min = 0, Max = 5, Increment = 0.05, Value = 1})}, gui.ListFrame.new(nil,EditTexture.Content).Content)
-        local OffsetStudsU = gui.Labeled.new({Text = "OffsetStudsU", LabelSize = UDim.new(0,90), Object = gui.Slider.new({Min = 0, Max = 4, Increment = 0.05})}, gui.ListFrame.new(nil,EditTexture.Content).Content)
-        local OffsetStudsV = gui.Labeled.new({Text = "OffsetStudsV", LabelSize = UDim.new(0,90), Object = gui.Slider.new({Min = 0, Max = 4, Increment = 0.05})}, gui.ListFrame.new(nil,EditTexture.Content).Content)
+        local TransparencySlider = gui.Labeled.new({Text = "Transparency", LabelSize = UDim.new(0,90), Object = gui.Slider.new({Min = 0, Max = 1, Increment = 0.05, Value = v.Transparency})}, gui.ListFrame.new(nil,EditTexture.Content).Content)
+        TransparencySlider.Object:Changed(function(p)
+            SetTextureProperty(i, "Transparency", p)
+        end)
+        local StudsPerTileU = gui.Labeled.new({Text = "StudsPerTileU", LabelSize = UDim.new(0,90), Object = gui.Slider.new({Min = 0, Max = 5, Increment = 0.05, Value = v.StudsPerTileU or 1})}, gui.ListFrame.new(nil,EditTexture.Content).Content)
+        StudsPerTileU.Object:Changed(function(p)
+            SetTextureProperty(i, "StudsPerTileU", p)
+        end)
+        local StudsPerTileV = gui.Labeled.new({Text = "StudsPerTileV", LabelSize = UDim.new(0,90), Object = gui.Slider.new({Min = 0, Max = 5, Increment = 0.05, Value = v.StudsPerTileV or 1})}, gui.ListFrame.new(nil,EditTexture.Content).Content)
+        StudsPerTileV.Object:Changed(function(p)
+            SetTextureProperty(i, "StudsPerTileV", p)
+        end)
+        local OffsetStudsU = gui.Labeled.new({Text = "OffsetStudsU", LabelSize = UDim.new(0,90), Object = gui.Slider.new({Min = 0, Max = 4, Increment = 0.05, Value = v.OffsetStudsU})}, gui.ListFrame.new(nil,EditTexture.Content).Content)
+        OffsetStudsU.Object:Changed(function(p)
+            SetTextureProperty(i, "OffsetStudsU", p)
+        end)
+        local OffsetStudsV = gui.Labeled.new({Text = "OffsetStudsV", LabelSize = UDim.new(0,90), Object = gui.Slider.new({Min = 0, Max = 4, Increment = 0.05, Value = v.OffsetStudsV})}, gui.ListFrame.new(nil,EditTexture.Content).Content)
+        OffsetStudsV.Object:Changed(function(p)
+            SetTextureProperty(i, "OffsetStudsV", p)
+        end)
     end
 end
 
@@ -172,7 +251,17 @@ SelectedModels:Changed(function(Selection)
                         OriginalColor.Value = CurrentMesh.Color
                     end
                     if not CamoSlotInfo[SlotNum] then
-                        CamoSlotInfo[SlotNum] = {Material = CurrentMesh.Material, Color = CurrentMesh.Color}
+                        CamoSlotInfo[SlotNum] = {Material = CurrentMesh.Material, Color = CurrentMesh.Color, Reflectance = CurrentMesh.Reflectance}
+                    end
+                    local MeshTexture = CurrentMesh:FindFirstChildWhichIsA("Texture")
+                    if MeshTexture and string.sub(MeshTexture.Name,1,string.len(TexturePrefix)) == TexturePrefix then
+                        local TextureName = CurrentMesh:FindFirstChild("TextureName")
+                        if TextureName then TextureName = TextureName.Value end
+                        CamoSlotInfo[SlotNum].Texture = {Value = MeshTexture.Texture, Name = TextureName}
+                        local RequiredProperties = {"Transparency", "OffsetStudsV", "OffsetStudsU", "StudsPerTileV", "StudsPerTileU","Color3"}
+                        for _, k in pairs(RequiredProperties) do
+                            CamoSlotInfo[SlotNum][k] = MeshTexture[k]
+                        end
                     end
                     local DoesNotContain = true
                     for _, l in pairs(Models) do
@@ -192,5 +281,5 @@ DumpGUIButton:Clicked(function() gui.GUIUtil.DumpGUI(Widget.Content) end)
 
 
 plugin.Unloading:Connect(function()
-    plugin:SetSetting(ImportedCamoSaveID, Camos)
+    plugin:SetSetting(ImportedCamoSaveID, HttpService:JSONEncode(Camos))
 end)
