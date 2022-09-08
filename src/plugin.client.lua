@@ -235,8 +235,10 @@ local function UpdateEditor()
     ResetButton:Clicked(function()
         for i, v in pairs(Meshes) do
             for _, j in pairs(v) do
+                j.Material = Enum.Material.SmoothPlastic
+                j.Reflectance = 0
                 local OriginalColor = j:FindFirstChild("OriginalColor")
-                if OriginalColor then SetMeshProperty(i, "Color", OriginalColor.Value) OriginalColor:Destroy() end
+                if OriginalColor then j.Color = OriginalColor.Value OriginalColor:Destroy() end
                 local TextureName = j:FindFirstChild("TextureName")
                 if TextureName then TextureName:Destroy() end
                 for _, k in pairs(j:GetChildren()) do
@@ -293,9 +295,9 @@ SelectedModels:Changed(function(Selection)
     UpdateEditor()
 end)
 
-gui.ListFrame.new({Height = 10})
-local DumpGUIButton = gui.Button.new({Text = "Dump GUI"})
-DumpGUIButton:Clicked(function() gui.GUIUtil.DumpGUI(Widget.Content) end)
+--gui.ListFrame.new({Height = 10})
+--local DumpGUIButton = gui.Button.new({Text = "Dump GUI"})
+--DumpGUIButton:Clicked(function() gui.GUIUtil.DumpGUI(Widget.Content) end)
 
 
 plugin.Unloading:Connect(function()
